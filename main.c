@@ -10,7 +10,7 @@
 #define N 20
 #define M 20
 
-# define eps 0.000001
+#define eps 0.000001
 
 #define COUNT 2000
 
@@ -53,6 +53,23 @@ double k_function(double x, double y) {
 }
 
 
+double f_function(double x, double y) {
+    double tmp = k_function(x, y);
+    return tmp + 2 * tmp * tmp + 4 * tmp * tmp * tmp;
+}
+
+
+double** f_fill(double **f, int row, int col, double *x, double *y) {
+    for (int i = 0; i < row; ++i) {
+        for (int j = 0; j < col; ++j) {
+//           todo: change with conditions;
+            f[i][j] = f_function(x[i], y[j]);
+        }
+    }
+    return f;
+}
+
+
 double** a_fill(double **a, double *x, double *y) {
     for (int i = 1; i <= M; ++i) {
         for (int j = 1; j <= N; ++j) {
@@ -73,15 +90,15 @@ double** b_fill(double **b, double *x, double *y) {
 }
 
 
-double norm(double **w_next, double **w_prev) {
-    double norm = 0;
+double norm(double **u, double **v) {
+    double norm = 0, tmp = 0;
     for (int i = 0; i <= M; ++i) {
 
+        tmp = 0;
         for (int j = 0; j <= N; ++j) {
-
+            tmp += H2 * weight_1(i) * weight_2(j) *u[i][j] * v[i][j];
         }
-//        todo: fix norm
-//        norm += ro(i, j) * (w_next  )
+        norm += H1 * tmp;
     }
     return norm;
 }
@@ -185,7 +202,7 @@ int main() {
     a = a_fill(a, x, y);
     b = b_fill(b, x, y);
 
-    double ***w = (double ***) malloc( COUNT * sizeof(double **));
+    double ***w = (double ***) malloc(COUNT * sizeof(double **));
     for (int i = 0; i < COUNT; ++i){
         w[i] = (double **) malloc((N + 1) * sizeof(double *));
         for (int j = 0; j < N + 1; ++j) {
