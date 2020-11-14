@@ -28,10 +28,10 @@ double H2 = (double) (B2 - B1) / N;
 double weight_1(int i) {
     if ((i >= 1) && (i <= M - 1)) {
         return 1.0;
-    } else if (i == M) {
+    } else if ((i == M) || (i == 0)) {
         return 0.5;
     } else {
-        printf("ERROR: weight1");
+        printf("ERROR: weight1 %d\n", i);
     }
     return 0;
 }
@@ -39,10 +39,10 @@ double weight_1(int i) {
 double weight_2(int j) {
     if ((j >= 1) && (j <= N - 1)) {
         return 1.0;
-    } else if (j == N) {
+    } else if ((j == N) || (j == 0)) {
         return 0.5;
     } else {
-        printf("ERROR: weight2");
+        printf("ERROR: weight2 %d\n", j);
     }
     return 0;
 }
@@ -56,6 +56,18 @@ double k_function(double x, double y) {
 double f_function(double x, double y) {
     double tmp = k_function(x, y);
     return tmp + 2 * tmp * tmp + 4 * tmp * tmp * tmp;
+}
+
+
+double psi_top(double x) {
+    double tmp = (x*x + 17);
+    return -32 / (tmp * tmp * tmp) + 2 / tmp;
+}
+
+
+double psi_bottom(double x) {
+    double tmp = (x*x + 2);
+    return -8 / (tmp * tmp * tmp) + 2 / tmp;
 }
 
 
@@ -90,18 +102,6 @@ double** b_fill(double **b, double *x, double *y) {
 }
 
 
-double norm(double **u, double **v) {
-    double norm = 0, tmp = 0;
-    for (int i = 0; i <= M; ++i) {
-
-        tmp = 0;
-        for (int j = 0; j <= N; ++j) {
-            tmp += H2 * weight_1(i) * weight_2(j) *u[i][j] * v[i][j];
-        }
-        norm += H1 * tmp;
-    }
-    return norm;
-}
 
 
 double deriv_x_beyond(double **w, int i, int j) {
@@ -137,9 +137,16 @@ double dot_product(double **u, double **v) {
     return dot_value;
 }
 
+
+double norm_to_second_degree(double **u) {
+    double norm_squared = dot_product(u, u);
+    return norm_squared;
+}
+
 double** matrix_multiply(double **a, int row1, int col1, double **b, int row2, int col2) {
+    printf("LOG: MULTIPLY MATRICES\n");
     if (col1 != row2) {
-        printf("ERROR: wrong row and column in matrix multiplying");
+        printf("ERROR: wrong row and column in matrix multiplying\n");
         exit(-1);
     }
     double** c = (double **) malloc(row1  * sizeof(double*));
@@ -156,6 +163,7 @@ double** matrix_multiply(double **a, int row1, int col1, double **b, int row2, i
 }
 
 double ** matrix_difference(double **a, double **b, int row, int col) {
+    printf("LOG: MATRIX DIFFERENCE\n");
     double** c = (double **) malloc(row  * sizeof(double*));
     for (int i = 0; i < row; i++) {
         c[i] = (double*) malloc(col * sizeof(double));
@@ -167,69 +175,305 @@ double ** matrix_difference(double **a, double **b, int row, int col) {
     return c;
 }
 
+
+double** fill_first_right_border_condition(double **w, const double *y) {
+    for (int j = 0; j <= N; ++j) {
+        w[M][j] = 1;
+//        w[M][j] = 2.0 / (10.0 + y[j] * y[j]);
+    }
+    return w;
+}
+
+
+double** fill_first_left_border_condition(double **w, const double *x) {
+    for (int j = 0; j <= N; ++j) {
+        w[0][j] = 1;
+//        w[0][j] = 2.0 / (5.0 + x[j] * x[j]);
+    }
+    return w;
+}
+
+//  q === 1
+double** fill_third_top_condition(double **w,
+                                  const double *x, const double *y,
+                                  const double q) {
+    for (int i = 1; i <= M -1; ++i) {
+        w[i][N] = 2 / (H2 * H2) * k_function(x[i], y[N]-0.5 * H2) +
+                (q + 2 / H2) +
+                (k_function(x[i] + 0.5 * H1, y[N]) + k_function(x[i] - 0.5 * H1, y[N])) / (H1 * H1);
+        w[i][N-1] = -2 / (H2 * H2) * k_function(x[i], y[N]-0.5 * H2);
+        w[i+1][N] = -k_function(x[i] + 0.5 * H1, y[N])/ (H1 * H1);
+        w[i-1][N] = -k_function(x[i] - 0.5 * H1, y[N])/ (H1 * H1);
+    }
+    return w;
+}
+
+//  q === 1
+double** fill_third_bottom_condition(double **w,
+                                     const double *x, const double *y,
+                                     const double q) {
+    for (int i = 1; i <= M -1; ++i) {
+        w[i][0] = 2 / (H2 * H2) * k_function(x[i], y[1]-0.5 * H2) +
+                  (q + 2 / H2) +
+                  (k_function(x[i] + 0.5 * H1, y[0]) + k_function(x[i] - 0.5 * H1, y[0])) / (H1 * H1);
+        w[i][1] = -2 / (H2 * H2) *k_function(x[i], y[1]-0.5 * H2);
+        w[i+1][0] = k_function(x[i] + 0.5 * H1, y[0])/ (H1 * H1);
+        w[i-1][0] = k_function(x[i] - 0.5 * H1, y[0])/ (H1 * H1);
+    }
+    return  w;
+}
+
+//  q === 1
+double** fill_operator_part(double **w,
+                            const double *x, const double *y,
+                            const double q) {
+    for (int i = 1; i <= M - 1; ++i) {
+        for (int j = 2; j <= N - 1; ++j) {
+            w[i][j] = q + 1 / (H1 * H1) * (k_function(x[i] + 0.5 * H1, y[j]) + k_function(x[i] - 0.5 * H1, y[j])) +
+                    1 / (H2 * H2) * (k_function(x[i], y[j] + 0.5 * H2) + k_function(x[i], y[j] - 0.5 * H2));
+            w[i+1][j] = -1 / (H1 * H1) * (k_function(x[i] + 0.5 * H1, y[j]));
+            w[i-1][j] = -1 / (H1 * H1) * (k_function(x[i] - 0.5 * H1, y[j]));
+            w[i][j+1] = -1 / (H2 * H2) * (k_function(x[i], y[j] + 0.5 * H2));
+            w[i][j-1] = -1 / (H2 * H2) * (k_function(x[i], y[j] - 0.5 * H2));
+        }
+    }
+    return w;
+}
+
+
+double** fill_f(double **f, const double *x, const double *y) {
+//    for (int i = 1; i <= M - 1; ++i) {
+//        for (int j = 2; j <= N - 1; ++j) {
+//            f[i][j] = f_function(x[i], y[j]);
+//            printf("i=%d, j=%d, result=%f\n", i, j, f[i][j]);
+//        }
+//    }
+    for (int i = 1; i <= M - 1; ++i) {
+        f[i][N] = f_function(x[i], y[N]) + 2 / H2 * psi_top(x[i]);
+        f[i][1] = f_function(x[i], y[0]) + 2 / H2 * psi_bottom(x[i]);
+    }
+
+    for (int j = 0; j <= N; ++j) {
+        f[0][j] =  2.0 / (5.0 + y[j] * y[j]);
+        f[N][j] =  2.0 / (10.0 + y[j] * y[j]);
+    }
+    return f;
+}
+
+
+int test_multiply_matrices(void) {
+    double **a = (double **) malloc(3 * sizeof(double *));
+    for (int i = 0; i < 3; ++i) {
+        a[i] = (double *) malloc(2 * sizeof(double));
+    }
+
+    double **b = (double **) malloc(3 * sizeof(double *));
+    for (int i = 0; i < 3; ++i) {
+        b[i] = (double *) malloc(2 * sizeof(double));
+    }
+    int c[3][2];
+    a[0][0] = 1; a[1][0] = -1; a[2][0] = 5;
+    a[0][1] = 2; a[1][1] = 4; a[2][1] = -3;
+
+    b[0][0] = 0; b[1][0] = -1;
+    b[0][1] = 2; b[1][1] = 5;
+
+    c[0][0] = -2; c[1][0] = -4; c[2][0] = 3;
+    c[0][1] = 12; c[1][1] = 18; c[2][1] = -5;
+
+    double** res = matrix_multiply(a, 3, 2, b, 2, 2);
+
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 2; ++j) {
+            if (c[i][j] != res[i][j]) {
+                printf("LOG: TEST desn't pass\n");
+
+                for (int m = 0; m< 3; ++m) {
+                    for (int n = 0; n < 2; ++n) {
+                        printf("m=%d, n=%d, result=%f expected=%d| ",m, n, res[m][n], c[m][n]);
+                    }
+                    printf("\n");
+                }
+                printf("\n\n");
+
+                exit(-1);
+            }
+         }
+    }
+    printf("LOG: TEST passed\n");
+    return 1;
+
+}
+
+int test_diff_of_matrices(void) {
+    double **a = (double **) malloc(3 * sizeof(double *));
+    for (int i = 0; i < 3; ++i) {
+        a[i] = (double *) malloc(2 * sizeof(double));
+    }
+
+    double **c = (double **) malloc(3 * sizeof(double *));
+    for (int i = 0; i < 3; ++i) {
+        c[i] = (double *) malloc(2 * sizeof(double));
+    }
+    a[0][0] = 1; a[1][0] = -1; a[2][0] = 5;
+    a[0][1] = 2; a[1][1] = 4; a[2][1] = -3;
+
+    c[0][0] = -2; c[1][0] = -4; c[2][0] = 3;
+    c[0][1] = 12; c[1][1] = 18; c[2][1] = -5;
+
+    double diff[3][2];
+    diff[0][0] = 3; diff[1][0] = 3; diff[2][0] = 2;
+    diff[0][1] = -10; diff[1][1] = -14; diff[2][1] = 2;
+
+    double** res = matrix_difference(a, c, 3, 2);
+
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 2; ++j) {
+            if (fabs(diff[i][j] - res[i][j]) > eps) {
+                printf("LOG: TEST desn't pass\n");
+
+                for (int m = 0; m< 3; ++m) {
+                    for (int n = 0; n < 2; ++n) {
+                        printf("m=%d, n=%d, result=%f expected=%f| ",m, n, res[m][n], diff[m][n]);
+                    }
+                    printf("\n");
+                }
+                printf("\n\n");
+
+                exit(-1);
+            }
+        }
+    }
+    printf("LOG: TEST passed\n");
+    return 1;
+
+}
+
 //double ** fill_r() {
 //
 //}
 
 int main() {
-
-    double **a = (double **) malloc((N + 1) * sizeof(double *));
-    for (int i = 0; i < N + 1; ++i) {
-        a[i] = (double *) malloc((M + 1) * sizeof(double));
+    test_multiply_matrices();
+    test_diff_of_matrices();
+    double **a = (double **) malloc((M + 1) * sizeof(double *));
+    for (int i = 0; i < M + 1; ++i) {
+        a[i] = (double *) malloc((N + 1) * sizeof(double));
     }
 
-    double **b = (double **) malloc((N + 1) * sizeof(double *));
-    for (int i = 0; i < N + 1; ++i) {
-        b[i] = (double *) malloc((M + 1) * sizeof(double));
+    double **b = (double **) malloc((M + 1) * sizeof(double *));
+    for (int i = 0; i < M + 1; ++i) {
+        b[i] = (double *) malloc((N + 1) * sizeof(double));
     }
 
-    double **r = (double **) malloc((N + 1) * sizeof(double *));
-    for (int i = 0; i < N + 1; ++i) {
-        r[i] = (double *) malloc((M + 1) * sizeof(double));
+    double **r = (double **) malloc((M + 1) * sizeof(double *));
+    for (int i = 0; i < M + 1; ++i) {
+        r[i] = (double *) malloc((N + 1) * sizeof(double));
     }
 
-    double *x = (double *) malloc ((N + 1) * sizeof(double));
-    double *y = (double *) malloc ((M + 1) * sizeof(double));
+    double *x = (double *) malloc ((M + 1) * sizeof(double));
+    double *y = (double *) malloc ((N + 1) * sizeof(double));
+
 
     for (int i = 0; i <= M; ++i) {
         x[i] = A1 + i * H1;
+        printf("%f ", x[i]);
     }
+    printf("\n");
+
 
     for (int i = 0; i <= N; ++i) {
         y[i] = B1 + i * H2;
+        printf("%f ", y[i]);
     }
+    printf("\n");
 
-    a = a_fill(a, x, y);
-    b = b_fill(b, x, y);
+    double q = 1.0;
+
+// FILL MATRIX B
+    printf("LOG: FILLING B\n");
+    b = fill_f(b, x, y);
+
+// FILL MATRIX A
+    printf("LOG: FILLING A\n");
+    a = fill_first_left_border_condition(a, x);
+    a = fill_first_right_border_condition(a, y);
+    a = fill_third_bottom_condition(a, x, y, q);
+    a = fill_third_top_condition(a, x, y, q);
+    a = fill_operator_part(a, x, y, q);
+
+
+    for (int i = 0; i < M + 1; ++i) {
+        for (int j = 0; j < N + 1; ++j) {
+            printf("i=%d, j=%d, result=%f | ",i, j, a[i][j]);
+        }
+        printf("\n");
+    }
+    printf("\n\n");
+
 
     double ***w = (double ***) malloc(COUNT * sizeof(double **));
     for (int i = 0; i < COUNT; ++i){
-        w[i] = (double **) malloc((N + 1) * sizeof(double *));
-        for (int j = 0; j < N + 1; ++j) {
-            w[i][j] = (double *) malloc((M + 1) * sizeof(double));
+        w[i] = (double **) malloc((M + 1) * sizeof(double *));
+        for (int j = 0; j < M + 1; ++j) {
+            w[i][j] = (double *) malloc((N + 1) * sizeof(double));
         }
     }
     int k = 0;
-    for (int i = 0; i < N+1; ++i) {
-        for (int j = 0; j < M+1; ++j) {
-            w[0][i][j] = 0;
+    for (int out_ind = 0; out_ind < COUNT; ++out_ind) {
+        for (int i = 0; i < M + 1; ++i) {
+            for (int j = 0; j < N + 1; ++j) {
+                w[out_ind][i][j] = 0;
+            }
         }
     }
+
+
+    double** ar;
+    double current_norm = 0;
     do {
-        r = matrix_difference(matrix_multiply(a, M, N, w[k], M, N), b, M, N);
+        printf("LOG: Start iteration #%d\n", k + 1);
+        r = matrix_difference(matrix_multiply(a, M + 1, N + 1, w[k], M + 1, N +1),
+                              b, M + 1, N + 1);
+
+
+//        for (int i = 0; i < M + 1; ++i) {
+//            for (int j = 0; j < N + 1; ++j) {
+//                printf("i=%d, j=%d, result=%f | ",i, j,r[i][j]);
+//            }
+//            printf("\n");
+//        }
+
 
         // check dimensions
-        double** ar = matrix_multiply(a, M, N, r, M, 1);
-        double tmp = norm(ar, ar);
-        double t = dot_product(ar, r) / (tmp * tmp);
-        for (int i = 0; i < N+1; ++i) {
-            for (int j = 0; j < M+1; ++j) {
+        ar = matrix_multiply(a, M+1, N+1, r, M+1, 1);
+//        for (int i = 0; i < M ; ++i) {
+//            for (int j = 0; j < N; ++j) {
+//                printf("%f ", ar[i][j]);
+//            }
+//            printf("\n");
+//        }
+        double tmp = norm_to_second_degree(ar);
+        double t = dot_product(ar, r) / tmp;
+
+        for (int i = 0; i < M + 1; ++i) {
+            for (int j = 0; j < N + 1; ++j) {
+//                printf("%f %f\n", t*r[i][j], w[k][i][j]);
                 w[k+1][i][j] = w[k][i][j] - t * r[i][j];
             }
         }
+
+        current_norm = norm_to_second_degree(matrix_difference(w[k+1], w[k], M + 1, N + 1));
+
         ++k;
+        printf("%f\n", current_norm);
+    } while (current_norm > eps * eps);
 
-    } while (norm(w[k+1], w[k]) > eps);
-
+//    for (int i = 0; i < M + 1; ++i) {
+//        for (int j = 0; j < N + 1; ++j) {
+//            printf("%f ", w[k - 1][i][j]);
+//        }
+//        printf("\n");
+//    }
     return 0;
 }
