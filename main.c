@@ -7,12 +7,15 @@
 #define B1 -1.0
 #define B2 4.0
 
-#define N 20
-#define M 20
+#define N 10
+#define M 10
 
 #define eps 0.000001
 
-#define COUNT 2000
+#define COUNT 20000
+
+
+// todo: use realloc or optimize memory usage (priority 1)
 
 double h1(int m) {
     return (double) (A2 - A1) / m;
@@ -138,9 +141,9 @@ double dot_product(double **u, double **v) {
 }
 
 
-double norm_to_second_degree(double **u) {
+double norm(double **u) {
     double norm_squared = dot_product(u, u);
-    return norm_squared;
+    return sqrt(norm_squared);
 }
 
 double** matrix_multiply(double **a, int row1, int col1, double **b, int row2, int col2) {
@@ -176,78 +179,72 @@ double ** matrix_difference(double **a, double **b, int row, int col) {
 }
 
 
-double** fill_first_right_border_condition(double **w, const double *y) {
+double** fill_first_right_border_condition(double **w, double **pertrubed_f, const double *y) {
     for (int j = 0; j <= N; ++j) {
-        w[M][j] = 1;
-//        w[M][j] = 2.0 / (10.0 + y[j] * y[j]);
+        pertrubed_f[M][j] = w[M][j];
+//        w[M][j] += 2.0 / (10.0 + y[j] * y[j]);
     }
-    return w;
+    return pertrubed_f;
 }
 
 
-double** fill_first_left_border_condition(double **w, const double *x) {
+double** fill_first_left_border_condition(double **w, double **pertrubed_f, const double *x) {
     for (int j = 0; j <= N; ++j) {
-        w[0][j] = 1;
-//        w[0][j] = 2.0 / (5.0 + x[j] * x[j]);
+        pertrubed_f[0][j] = w[0][j];
+//        w[0][j] += 2.0 / (5.0 + x[j] * x[j]);
     }
-    return w;
+    return pertrubed_f;
 }
 
 //  q === 1
-double** fill_third_top_condition(double **w,
+double** fill_third_top_condition(double **w, double **pertrubed_f,
                                   const double *x, const double *y,
                                   const double q) {
-    for (int i = 1; i <= M -1; ++i) {
-        w[i][N] = 2 / (H2 * H2) * k_function(x[i], y[N]-0.5 * H2) +
+    for (int i = 1; i <= M - 1; ++i) {
+        pertrubed_f[i][N] = w[i][N] *( 2 / (H2 * H2) * k_function(x[i], y[N]-0.5 * H2) +
                 (q + 2 / H2) +
-                (k_function(x[i] + 0.5 * H1, y[N]) + k_function(x[i] - 0.5 * H1, y[N])) / (H1 * H1);
-        w[i][N-1] = -2 / (H2 * H2) * k_function(x[i], y[N]-0.5 * H2);
-        w[i+1][N] = -k_function(x[i] + 0.5 * H1, y[N])/ (H1 * H1);
-        w[i-1][N] = -k_function(x[i] - 0.5 * H1, y[N])/ (H1 * H1);
+                (k_function(x[i] + 0.5 * H1, y[N]) + k_function(x[i] - 0.5 * H1, y[N])) / (H1 * H1)) +
+                w[i][N-1] * (-2 / (H2 * H2) * k_function(x[i], y[N]-0.5 * H2)) +
+                w[i+1][N] * (-k_function(x[i] + 0.5 * H1, y[N])/ (H1 * H1)) +
+                w[i-1][N] * (-k_function(x[i] - 0.5 * H1, y[N])/ (H1 * H1));
     }
-    return w;
+    return pertrubed_f;
 }
 
 //  q === 1
-double** fill_third_bottom_condition(double **w,
+double** fill_third_bottom_condition(double **w, double **pertrubed_f,
                                      const double *x, const double *y,
                                      const double q) {
     for (int i = 1; i <= M -1; ++i) {
-        w[i][0] = 2 / (H2 * H2) * k_function(x[i], y[1]-0.5 * H2) +
-                  (q + 2 / H2) +
-                  (k_function(x[i] + 0.5 * H1, y[0]) + k_function(x[i] - 0.5 * H1, y[0])) / (H1 * H1);
-        w[i][1] = -2 / (H2 * H2) *k_function(x[i], y[1]-0.5 * H2);
-        w[i+1][0] = k_function(x[i] + 0.5 * H1, y[0])/ (H1 * H1);
-        w[i-1][0] = k_function(x[i] - 0.5 * H1, y[0])/ (H1 * H1);
+        pertrubed_f[i][0] = w[i][0] * (2 / (H2 * H2) * k_function(x[i], y[1]-0.5 * H2) + (q + 2 / H2) +
+                (k_function(x[i] + 0.5 * H1, y[0]) + k_function(x[i] - 0.5 * H1, y[0])) / (H1 * H1)) +
+                w[i][1] * ( -2 / (H2 * H2) *k_function(x[i], y[1]-0.5 * H2)) +
+                w[i+1][0] * (k_function(x[i] + 0.5 * H1, y[0])/ (H1 * H1)) +
+                w[i-1][0] * (k_function(x[i] - 0.5 * H1, y[0])/ (H1 * H1));
     }
-    return  w;
+    return  pertrubed_f;
 }
 
 //  q === 1
-double** fill_operator_part(double **w,
+double** fill_operator_part(double **w, double **pertrubed_f,
                             const double *x, const double *y,
                             const double q) {
     for (int i = 1; i <= M - 1; ++i) {
         for (int j = 2; j <= N - 1; ++j) {
-            w[i][j] = q + 1 / (H1 * H1) * (k_function(x[i] + 0.5 * H1, y[j]) + k_function(x[i] - 0.5 * H1, y[j])) +
-                    1 / (H2 * H2) * (k_function(x[i], y[j] + 0.5 * H2) + k_function(x[i], y[j] - 0.5 * H2));
-            w[i+1][j] = -1 / (H1 * H1) * (k_function(x[i] + 0.5 * H1, y[j]));
-            w[i-1][j] = -1 / (H1 * H1) * (k_function(x[i] - 0.5 * H1, y[j]));
-            w[i][j+1] = -1 / (H2 * H2) * (k_function(x[i], y[j] + 0.5 * H2));
-            w[i][j-1] = -1 / (H2 * H2) * (k_function(x[i], y[j] - 0.5 * H2));
+            pertrubed_f[i][j] = w[i][j] * (q + 1 / (H1 * H1) * (k_function(x[i] + 0.5 * H1, y[j]) + k_function(x[i] - 0.5 * H1, y[j])) +
+                    1 / (H2 * H2) * (k_function(x[i], y[j] + 0.5 * H2) + k_function(x[i], y[j] - 0.5 * H2))) +
+                    w[i+1][j] * (-1 / (H1 * H1) * (k_function(x[i] + 0.5 * H1, y[j]))) +
+                    w[i-1][j] * (-1 / (H1 * H1) * (k_function(x[i] - 0.5 * H1, y[j]))) +
+                    w[i][j+1] * (-1 / (H2 * H2) * (k_function(x[i], y[j] + 0.5 * H2))) +
+                    w[i][j-1] * (-1 / (H2 * H2) * (k_function(x[i], y[j] - 0.5 * H2)));
         }
     }
-    return w;
+    return pertrubed_f;
 }
 
 
 double** fill_f(double **f, const double *x, const double *y) {
-//    for (int i = 1; i <= M - 1; ++i) {
-//        for (int j = 2; j <= N - 1; ++j) {
-//            f[i][j] = f_function(x[i], y[j]);
-//            printf("i=%d, j=%d, result=%f\n", i, j, f[i][j]);
-//        }
-//    }
+
     for (int i = 1; i <= M - 1; ++i) {
         f[i][N] = f_function(x[i], y[N]) + 2 / H2 * psi_top(x[i]);
         f[i][1] = f_function(x[i], y[0]) + 2 / H2 * psi_bottom(x[i]);
@@ -256,6 +253,12 @@ double** fill_f(double **f, const double *x, const double *y) {
     for (int j = 0; j <= N; ++j) {
         f[0][j] =  2.0 / (5.0 + y[j] * y[j]);
         f[N][j] =  2.0 / (10.0 + y[j] * y[j]);
+    }
+
+    for (int i = 1; i <= M - 1; ++i) {
+        for (int j = 2; j <= N - 1; ++j) {
+            f[i][j] = f_function(x[i], y[j]);
+        }
     }
     return f;
 }
@@ -351,7 +354,20 @@ int test_diff_of_matrices(void) {
 
 //double ** fill_r() {
 //
+//
+//
 //}
+
+double** apply_operator(double **w, double **pertrubed_f,
+                          const double *x, const double *y,
+                          const double q) {
+    pertrubed_f = fill_first_left_border_condition(w, pertrubed_f, x);
+    pertrubed_f = fill_first_right_border_condition(w, pertrubed_f, y);
+    pertrubed_f = fill_third_bottom_condition(w, pertrubed_f, x, y, q);
+    pertrubed_f = fill_third_top_condition(w, pertrubed_f, x, y, q);
+    pertrubed_f = fill_operator_part(w, pertrubed_f, x, y, q);
+    return pertrubed_f;
+}
 
 int main() {
     test_multiply_matrices();
@@ -361,6 +377,13 @@ int main() {
         a[i] = (double *) malloc((N + 1) * sizeof(double));
     }
 
+    for (int i = 0; i < M+1; ++i){
+        for (int j = 0; j < N + 1; ++j) {
+            a[i][j] = 0.0;
+        }
+    }
+
+
     double **b = (double **) malloc((M + 1) * sizeof(double *));
     for (int i = 0; i < M + 1; ++i) {
         b[i] = (double *) malloc((N + 1) * sizeof(double));
@@ -369,6 +392,11 @@ int main() {
     double **r = (double **) malloc((M + 1) * sizeof(double *));
     for (int i = 0; i < M + 1; ++i) {
         r[i] = (double *) malloc((N + 1) * sizeof(double));
+    }
+
+    double **pertrubed_f = (double **) malloc((M + 1) * sizeof(double *));
+    for (int i = 0; i < M + 1; ++i) {
+        pertrubed_f[i] = (double *) malloc((N + 1) * sizeof(double));
     }
 
     double *x = (double *) malloc ((M + 1) * sizeof(double));
@@ -394,13 +422,8 @@ int main() {
     printf("LOG: FILLING B\n");
     b = fill_f(b, x, y);
 
-// FILL MATRIX A
-    printf("LOG: FILLING A\n");
-    a = fill_first_left_border_condition(a, x);
-    a = fill_first_right_border_condition(a, y);
-    a = fill_third_bottom_condition(a, x, y, q);
-    a = fill_third_top_condition(a, x, y, q);
-    a = fill_operator_part(a, x, y, q);
+
+
 
 
     for (int i = 0; i < M + 1; ++i) {
@@ -428,52 +451,68 @@ int main() {
         }
     }
 
+    for (int i = 0; i < M + 1; ++i) {
+        for (int j = 0; j < N + 1; ++j) {
+            w[0][i][j] = u_function(x[i], y[j]);
+        }
+    }
 
-    double** ar;
-    double current_norm = 0;
+
+    double** ar = (double **) malloc((M + 1) * sizeof(double *));
+    for (int i = 0; i < M + 1; ++i) {
+        ar[i] = (double *) malloc((N + 1) * sizeof(double));
+    }
+
+    double current_norm;
     do {
         printf("LOG: Start iteration #%d\n", k + 1);
-        r = matrix_difference(matrix_multiply(a, M + 1, N + 1, w[k], M + 1, N +1),
+
+        pertrubed_f = fill_first_left_border_condition(w[k], pertrubed_f, x);
+        pertrubed_f = fill_first_right_border_condition(w[k], pertrubed_f, y);
+        pertrubed_f = fill_third_bottom_condition(w[k], pertrubed_f, x, y, q);
+        pertrubed_f = fill_third_top_condition(w[k], pertrubed_f, x, y, q);
+        pertrubed_f = fill_operator_part(w[k], pertrubed_f, x, y, q);
+
+        r = matrix_difference(pertrubed_f,
                               b, M + 1, N + 1);
 
 
-//        for (int i = 0; i < M + 1; ++i) {
-//            for (int j = 0; j < N + 1; ++j) {
-//                printf("i=%d, j=%d, result=%f | ",i, j,r[i][j]);
-//            }
-//            printf("\n");
-//        }
-
-
         // check dimensions
-        ar = matrix_multiply(a, M+1, N+1, r, M+1, 1);
-//        for (int i = 0; i < M ; ++i) {
-//            for (int j = 0; j < N; ++j) {
-//                printf("%f ", ar[i][j]);
-//            }
-//            printf("\n");
-//        }
-        double tmp = norm_to_second_degree(ar);
-        double t = dot_product(ar, r) / tmp;
+        ar = apply_operator(r, ar, x, y, q);
+
+        double tmp = norm(ar);
+        double t = dot_product(ar, r) / (tmp * tmp);
 
         for (int i = 0; i < M + 1; ++i) {
             for (int j = 0; j < N + 1; ++j) {
+
 //                printf("%f %f\n", t*r[i][j], w[k][i][j]);
                 w[k+1][i][j] = w[k][i][j] - t * r[i][j];
             }
         }
 
-        current_norm = norm_to_second_degree(matrix_difference(w[k+1], w[k], M + 1, N + 1));
+
+
+        current_norm = norm(matrix_difference(w[k+1], w[k], M + 1, N + 1));
 
         ++k;
         printf("%f\n", current_norm);
-    } while (current_norm > eps * eps);
+    } while ( current_norm > eps);
 
-//    for (int i = 0; i < M + 1; ++i) {
-//        for (int j = 0; j < N + 1; ++j) {
-//            printf("%f ", w[k - 1][i][j]);
-//        }
-//        printf("\n");
-//    }
+    for (int i = 0; i < M ; ++i) {
+        for (int j = 0; j < N; ++j) {
+            printf("%f ", w[k-1][i][j]);
+        }
+        printf("\n");
+    }
+
+    for (int i = 0; i < M ; ++i) {
+        for (int j = 0; j < N; ++j) {
+            printf("%f ", b[i][j]);
+        }
+        printf("\n");
+    }
+
+
     return 0;
 }
