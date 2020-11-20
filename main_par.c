@@ -81,65 +81,24 @@ double dot_product(double **u, double **v,
     for (i = i0; i < i0 + m; ++i) {
         double sum = 0;
 
-//        too investigate whyyy
+//        todo investigate whyyy
         if (i==10)
             v[i-i0][0] = 0;
         for (j = j0; j < j0 + n; ++j) {
-//            printf("u %f\n ", weight_1(i) * weight_2(j) * u[i - i0][j - j0] * v[i - i0][j - j0]);
+//            if (isnan(v[i-i0][j-j0]) )
+//                v[i-i0][j-j0] = 0;
             sum += H2 * weight_1(i) * weight_2(j) * u[i - i0][j - j0] * v[i - i0][j - j0];
 
 
         }
         dot_value += H1 * sum;
-//        printf("sum %f %f\n",  sum, dot_value);
     }
     MPI_Allreduce(&dot_value, &global_dot_value, 1, MPI_DOUBLE, MPI_SUM,
                   MPI_COMM_WORLD);
 
-//    printf("%d %f %f \n", rank, dot_value, global_dot_value);
 
     return global_dot_value;
 }
-
-//    double dot_value = 0, comm_dot_value = 0;
-//    double dot_values[size];
-//
-//    MPI_Request reqs[size];
-//    MPI_Status stats[size];
-//
-//    int i, j, proc;
-//
-//    for (i = 0; i < size; ++i) {
-//        dot_values[i] = 0;
-//    }
-//
-//    for (i = i0; i <= i1; ++i) {
-//        double sum = 0;
-//        for (j = j0; j <= j1; ++j) {
-//            sum += H2 * weight_1(i) * weight_2(j) * u[i][j] * v[i][j];
-//        }
-//        dot_value += H1 * sum;
-//        dot_values[rank] = dot_value;
-//        for (proc = 0; proc < size; ++proc) {
-//            if (proc == rank) {
-//                MPI_Irecv(&dot_values[proc], 1,
-//                          MPI_DOUBLE, proc, proc, MPI_COMM_WORLD, &reqs[rank]);
-//            }
-//            MPI_Isend(&dot_values[rank], 1, MPI_DOUBLE, proc, rank, MPI_COMM_WORLD, &reqs[proc]);
-//        }
-//        for (proc = 0; proc < size; ++proc) {
-//            comm_dot_value += dot_values[proc];
-//            printf("иуащку цфше %d %f \n", rank, dot_values[proc]);
-//        }
-//        MPI_Waitall(size, reqs, stats);
-//        for (proc = 0; proc < size; ++proc) {
-//            comm_dot_value += dot_values[proc];
-//            printf("%d %f \n", rank, dot_values[proc]);
-//        }
-//
-//    }
-//    return comm_dot_value;
-//}
 
 
 double norm(double **u,
@@ -414,6 +373,17 @@ double** apply_operator(double **w, double **pertrubed_f,
     }
 
 //    for (i = 0; i <= m; ++i) {
+//        left_snd_buf[i] = w[i][0];
+//        right_snd_buf[i] = w[i][n];
+//    }
+//
+//    for (j = 0; j <= n; ++j) {
+//        top_snd_buf[j] = w[m][j];
+//        bottom_snd_buf[j] = w[0][j];
+//    }
+
+
+//    for (i = 0; i <= m; ++i) {
 //        printf("top %f ", top_snd_buf[i]);
 //    }
 //    printf("\n");
@@ -496,27 +466,28 @@ int main(int argc, char *argv[]) {
     int M_local, N_local, i0, i1, j0, j1;
 
 
-    dimensions[0] = 2;
-    dimensions[1] = 2;
+    int n_procs = 10;
+    dimensions[0] = atoi(argv[argc-2]);
+    dimensions[1] = atoi(argv[argc-1]);
+
+    if (n_procs != dimensions[0] * dimensions[1]) {
+        printf("ERROR: dim[0] = %d, dim[1] = %d, procs = %d\n", dimensions[0], dimensions[1], n_procs);
+        exit(-1);
+    }
 
 
-    M_local = (M) / dimensions[0] -1;
-    N_local = (N ) / dimensions[1] -1;
+    M_local = (M) / dimensions[0] - 1;
+    N_local = (N ) / dimensions[1] - 1;
 
     wrap_around[0] = 1, wrap_around[1] = 1;
-//    printf("%d %d\n", N_local, M_local);
+    printf("%d %d\n", N_local, M_local);
 
-    MPI_Cart_create(MPI_COMM_WORLD, 2, dimensions, wrap_around, reorder, &grid_comm);
+    MPI_Cart_create(MPI_COMM_WORLD, 2 , dimensions, wrap_around, reorder, &grid_comm);
 
-
-
-    MPI_Cart_coords(grid_comm, rank, 2, coords);
+    MPI_Cart_coords(grid_comm, rank, fmax(dimensions[0], dimensions[1]), coords);
     Pi = coords[0];
     Pj = coords[1];
-//    MPI_Comm_rank(MPI_COMM_WORLD, &my_grid_rank);
-//    MPI_Cart_coords(MPI_COMM_WORLD, my_grid_rank, 2, coordinates);
-//    Pi = coords[0];
-//    Pj = coords[1];
+
 
     i0 = (M) / dimensions[0] * Pi;
     j0 = (N) / dimensions[1] * Pj;
@@ -632,22 +603,9 @@ int main(int argc, char *argv[]) {
         pertrubed_f = apply_operator(w[0], pertrubed_f, x, y, q, M_local, N_local, i0, j0, i1, j1, ranks, grid_comm);
 
         r = matrix_difference(pertrubed_f, b, r, M_local+1 , N_local+1);
-//        for (i = 0; i < M_local; ++i) {
-//            for (j=0; j< N_local;++j){
-//
-//                if (isnan(ar[i][j])) {
-//                    printf("ar isnan %d %d", i, j);
-//                }
-//            }
-//        }
-
+        
         ar = apply_operator(r, ar, x, y, q, M_local, N_local, i0, j0, i1, j1, ranks, grid_comm);
-////        for (i = 0; i < M_local + 1; ++i) {
-////            for (j = 0; j < N_local + 1; ++j) {
-////                printf("ar %f ", ar[i][j]);
-////            }
-////            printf("\n");
-////        }
+
         double tmp = norm(ar, M_local+1, N_local+1, i0, i1, j0, j1, size, rank);
 
         double t = dot_product(ar, r, M_local+1, N_local+1, i0, i1, j0, j1, size, rank) / (tmp * tmp);
