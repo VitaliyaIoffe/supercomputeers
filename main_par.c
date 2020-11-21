@@ -3,13 +3,13 @@
 #include <math.h>
 #include </usr/include/mpi/mpi.h>
 
-#define A1 -2.0
+#define A1 (-2.0)
 #define A2 3.0
-#define B1 -1.0
+#define B1 (-1.0)
 #define B2 4.0
 
-#define N 36
-#define M 36
+#define N 140
+#define M 140
 
 #define eps 0.00001
 
@@ -79,12 +79,12 @@ double dot_product(double **u, double **v,
     double dot_value = 0, global_dot_value = 0;
     int i, j;
 
-    for (i = i0; i < i0 + m; ++i) {
+    for (i = i0; i <= i1; ++i) {
         double sum = 0;
 
 //        todo investigate whyyy
-        if (i==10)
-            v[i-i0][0] = 0;
+//        if (i==10)
+//            v[i-i0][0] = 0;
         for (j = j0; j < j0 + n; ++j) {
             sum += H2 * weight_1(i) * weight_2(j) * u[i - i0][j - j0] * v[i - i0][j - j0];
 
@@ -106,16 +106,16 @@ double norm(double **u,
             const int j0, const int j1,
             const int size, const int rank) {
 
-
-    return sqrt(dot_product(u, u, m, n, i0, i1, j0, j1, size, rank));
+    double norm = dot_product(u, u, m, n, i0, i1, j0, j1, size, rank);
+    return sqrt(norm);
 }
 
 
 double** matrix_difference(double **a, double **b, double **c,
                            int row, int col) {
     int i, j;
-    for (i = 0; i < row; i++) {
-        for (j = 0; j < col; j++) {
+    for (i = 0; i <= row; i++) {
+        for (j = 0; j <= col; j++) {
             c[i][j] = a[i][j] - b[i][j];
         }
     }
@@ -125,26 +125,25 @@ double** matrix_difference(double **a, double **b, double **c,
 
 double** fill_first_right_border_condition(double **w, double **pertrubed_f, const double *y,
                                            const int m, const int n,
-                                           const int i0, const int j0) {
+                                           const int i0, const int j0,const int i1, const int j1) {
     int i, j;
     if (i1 != M) {
         return pertrubed_f;
     }
-    for (j = j0; j < j1; ++j) {
-        pertrubed_f[i1-1-i0][j-j0] = w[i1-1-i0][j-j0];
+    for (j = j0; j <= j1; ++j) {
+        pertrubed_f[i1-i0][j-j0] = w[i1-i0][j-j0];
     }
     return pertrubed_f;
 }
 
 
 double** fill_first_left_border_condition(double **w, double **pertrubed_f, const double *x,
-                                          const int m, const int n,
-                                          const int i0, const int j0) {
+                                          const int m, const int n,const int i0, const int j0, const int i1, const int j1) {
     int i, j;
     if (i0 != 0) {
         return pertrubed_f;
     }
-    for (j = j0; j < j1; ++j) {
+    for (j = j0; j <= j1; ++j) {
         pertrubed_f[0][j-j0] = w[0][j-j0];
     }
     return pertrubed_f;
@@ -155,35 +154,35 @@ double** fill_third_top_condition(double **w, double **pertrubed_f,
                                   const double *x, const double *y,
                                   const double q, const int m, const int n,
                                   const int i0, const int j0, const int i1, const int j1,
-                                  double *left_rcv_buf, double *right_rcv_buf,
-                                  double *top_rcv_buf, double *bottom_rcv_buf) {
+                                  const double *left_rcv_buf, const  double *right_rcv_buf,
+                                  const double *top_rcv_buf, const double *bottom_rcv_buf) {
     int i, j;
     double w_i_next, w_i_prev;
     if (j1 != N) {
         return pertrubed_f;
     }
     double w_next, w_prev;
-    for (i = i0; i < i1; ++i) {
+    for (i = i0; i <= i1; ++i) {
         if (!(i0 > 1 && i0 <= M - 1)) {
             continue;
         }
 
         if (i + 1 > i1) {
-            w_i_next = top_rcv_buf[N] * (-k_function(x[i] + 0.5 * H1, y[N])/ (H1 * H1));
+            w_i_next = top_rcv_buf[j1] * (-k_function(x[i-i0] + 0.5 * H1, y[j1])/ (H1 * H1));
         } else {
-            w_i_next = w[i+1-i0][N] * (-k_function(x[i] + 0.5 * H1, y[N])/ (H1 * H1));
+            w_i_next = w[i+1-i0][j1] * (-k_function(x[i-i0] + 0.5 * H1, y[j1])/ (H1 * H1));
         }
 
         if (i - 1 < i0) {
-            w_i_prev = bottom_rcv_buf[N] * (-k_function(x[i] - 0.5 * H1, y[N])/ (H1 * H1));
+            w_i_prev = bottom_rcv_buf[j1] * (-k_function(x[i-i0] - 0.5 * H1, y[j1])/ (H1 * H1));
         } else {
-            w_i_prev = w[i-1-i0][N] * (-k_function(x[i] - 0.5 * H1, y[N])/ (H1 * H1));
+            w_i_prev = w[i-i0][j1] * (-k_function(x[i-i0] - 0.5 * H1, y[j1])/ (H1 * H1));
         }
 
 
-        pertrubed_f[i][n] = w[i-i0][n] *( 2 / (H2 * H2) * k_function(x[i], y[n]-0.5 * H2) + (q + 2 / H2) +
-                (k_function(x[i] + 0.5 * H1, y[n]) + k_function(x[i] - 0.5 * H1, y[n])) / (H1 * H1)) +
-                w[i-i0][n-1] * (-2 / (H2 * H2) * k_function(x[i], y[n]-0.5 * H2)) +
+        pertrubed_f[i-i0][j1] = w[i-i0][j1] *( 2 / (H2 * H2) * k_function(x[i-i0], y[j1]-0.5 * H2) + (q + 2 / H2) +
+                (k_function(x[i-i0] + 0.5 * H1, y[j1]) + k_function(x[i-i0] - 0.5 * H1, y[j1])) / (H1 * H1)) +
+                w[i-i0][j1-1] * (-2 / (H2 * H2) * k_function(x[i-i0], y[j1]-0.5 * H2)) +
                 w_i_next + w_i_prev;
     }
     return pertrubed_f;
@@ -202,28 +201,28 @@ double** fill_third_bottom_condition(double **w, double **pertrubed_f,
     if (j0 != 0) {
         return pertrubed_f;
     }
-    for (i = i0; i < i1; ++i) {
+    for (i = i0; i <= i1; ++i) {
         if (!(i >= 1 && i <= M - 1)) {
             continue;
         }
 
 
         if (i + 1 > i1) {
-            w_i_next = top_rcv_buf[0] * (-1 / (H1 * H1) * (k_function(x[i] + 0.5 * H1, y[0])));
+            w_i_next = top_rcv_buf[0] * (-1 / (H1 * H1) * (k_function(x[i-i0] + 0.5 * H1, y[0])));
         } else {
-            w_i_next = w[i+1-i0][0] * (k_function(x[i] + 0.5 * H1, y[0])/ (H1 * H1));
+            w_i_next = w[i+1-i0][0] * (k_function(x[i-i0] + 0.5 * H1, y[0])/ (H1 * H1));
         }
 
         if (i - 1 < i0) {
-            w_i_prev = bottom_rcv_buf[0] * (-1 / (H1 * H1) * (k_function(x[i] - 0.5 * H1, y[0])));
+            w_i_prev = bottom_rcv_buf[0] * (-1 / (H1 * H1) * (k_function(x[i-i0] - 0.5 * H1, y[0])));
         } else {
-            w_i_prev = w[i-1-i0][0] * (k_function(x[i] - 0.5 * H1, y[0])/ (H1 * H1));
+            w_i_prev = w[i-1-i0][0] * (k_function(x[i-i0] - 0.5 * H1, y[0])/ (H1 * H1));
         }
 
 
-        pertrubed_f[i][0] = w[i-i0][0] * (2 / (H2 * H2) * k_function(x[i], y[1]-0.5 * H2) + (q + 2 / H2) +
-                (k_function(x[i] + 0.5 * H1, y[0]) + k_function(x[i] - 0.5 * H1, y[0])) / (H1 * H1)) +
-                w[i-i0][1] * ( -2 / (H2 * H2) *k_function(x[i], y[1]-0.5 * H2)) +
+        pertrubed_f[i-i0][0] = w[i-i0][0] * (2 / (H2 * H2) * k_function(x[i-i0], y[1]-0.5 * H2) + (q + 2 / H2) +
+                (k_function(x[i-i0] + 0.5 * H1, y[0]) + k_function(x[i-i0] - 0.5 * H1, y[0])) / (H1 * H1)) +
+                w[i-i0][1] * ( -2 / (H2 * H2) *k_function(x[i-i0], y[1]-0.5 * H2)) +
                 w_i_next +
                 w_i_prev;
     }
@@ -240,7 +239,7 @@ double** fill_operator_part(double **w, double **pertrubed_f,
     int i, j;
 
     double w_i_next, w_j_next, w_i_prev, w_j_prev;
-    for (i = i0; i < i1; ++i) {
+    for (i = i0; i <= i1; ++i) {
         if (!(i >= 1 && i <= M - 1)) {
             continue;
         }
@@ -250,7 +249,7 @@ double** fill_operator_part(double **w, double **pertrubed_f,
             }
 
             if (i + 1 >= i1) {
-                w_i_next = top_rcv_buf[i - i0] * (-1 / (H1 * H1) * (k_function(x[i-i0] + 0.5 * H1, y[j-j0])));
+                w_i_next = top_rcv_buf[i-i0] * (-1 / (H1 * H1) * (k_function(x[i-i0] + 0.5 * H1, y[j-j0])));
             } else {
                 w_i_next = w[i+1-i0][j-j0] * (-1 / (H1 * H1) * (k_function(x[i-i0] + 0.5 * H1, y[j-j0])));
             }
@@ -268,7 +267,7 @@ double** fill_operator_part(double **w, double **pertrubed_f,
             }
 
             if (j - 1 < j0) {
-                w_j_prev =  left_rcv_buf[j - j0] * (-1 / (H2 * H2) * (k_function(x[i-i0], y[j-j0] - 0.5 * H2)));
+                w_j_prev = left_rcv_buf[j - j0] * (-1 / (H2 * H2) * (k_function(x[i-i0], y[j-j0] - 0.5 * H2)));
             } else {
                 w_j_prev = w[i-i0][j-1-j0] * (-1 / (H2 * H2) * (k_function(x[i-i0], y[j-j0] - 0.5 * H2)));
             }
@@ -280,8 +279,8 @@ double** fill_operator_part(double **w, double **pertrubed_f,
                                     k_function(x[i-i0], y[j-j0] + 0.5 * H2) + k_function(x[i-i0], y[j-j0] - 0.5 * H2)))) +
                                             w_i_next + w_i_prev +
                                             w_j_next + w_j_prev;
-            if (isnan(pertrubed_f[i-i0][j-j0])) {
-                printf("ALARM %d %d \n", i, j);
+            if (i == 1 && j == 10 && isnan(w_i_next)) {
+                printf("ALARM %d %d  %f, %f\n", i, j, top_rcv_buf[i-i0], w[i+1-i0][j-j0]);
             }
         }
     }
@@ -295,36 +294,36 @@ double** fill_f(double **f, const double *x, const double *y,
                 const int i0, const int i1,
                 const int j0, const int j1) {
     int i, j;
-    for (i = 0; i <= m; ++i) {
+    for (i = i0; i <= i1; ++i) {
         if (i + i0 == 0 || i + i0 > M - 1) {
             continue;
         }
         if (j1 == N){
-            f[i][n] = f_function(x[i], y[n]) + 2 / H2 * psi_top(x[i]);
+            f[i-i0][j1-j0] = f_function(x[i-i0], y[j1-j0]) + 2 / H2 * psi_top(x[i-i0]);
         }
         if (j0 == 0) {
-            f[i][1] = f_function(x[i], y[0]) + 2 / H2 * psi_bottom(x[i]);
+            f[i-i0][1] = f_function(x[i-i0], y[0]) + 2 / H2 * psi_bottom(x[i-i0]);
         }
     }
 
-    for (j = 0; j <= n; ++j) {
+    for (j = j0; j <= j1; ++j) {
         if (i0 == 0) {
-            f[0][j] =  2.0 / (5.0 + y[j] * y[j]);
+            f[0][j-j0] =  2.0 / (5.0 + y[j-j0] * y[j-j0]);
         }
         if (i1 == M) {
-            f[m][j] =  2.0 / (10.0 + y[j] * y[j]);
+            f[i1-i0][j-j0] =  2.0 / (10.0 + y[j-j0] * y[j-j0]);
         }
     }
 
-    for (i = 0; i <= m; ++i) {
-        if (i0 == 0 || i + i0 > M - 1) {
+    for (i = i0; i <= i1; ++i) {
+       if (i == 0 || i > M - 1) {
             continue;
         }
-        for (j = 0; j <= n; ++j) {
-            if (j + j0 < 1 || j + j0 > N - 1) {
+        for (j = j0; j <= j1; ++j) {
+            if (j < 1 || j > N - 1) {
                 continue;
             }
-            f[i][j] = f_function(x[i], y[j]);
+            f[i-i0][j-j0] = f_function(x[i-i0], y[j-j0]);
         }
     }
 
@@ -336,7 +335,7 @@ double** apply_operator(double **w, double **pertrubed_f,
                         const double *x, const double *y,
                         const double q, const int m, const int n,
                         const int i0, const int j0, const int i1, const int j1,
-                        const int *rank,  MPI_Comm comm) {
+                        const int *rank,  MPI_Comm comm, int rank_number) {
 
 
     int left_rank = rank[0], right_rank = rank[1], top_rank = rank[2], bottom_rank = rank[3];
@@ -359,15 +358,16 @@ double** apply_operator(double **w, double **pertrubed_f,
     MPI_Request left_snd_req, left_rcv_req;
     MPI_Status left_snd_stat, left_rcv_stat;
 
-    int tag = 1, j, i;
+    int tag = 1;
+    int j, i;
 
-    for (j = j0; j < j1; ++j) {
+    for (j = j0; j <= j1; ++j) {
         left_snd_buf[j-j0] = w[0][j-j0];
-        right_snd_buf[j-j0] = w[m][j-j0];
+        right_snd_buf[j-j0] = w[i1-i0][j-j0];
     }
 
-    for (i = i0; i < i1; ++i) {
-        top_snd_buf[i-i0] = w[i-i0][n];
+    for (i = i0; i <= i1; ++i) {
+        top_snd_buf[i-i0] = w[i-i0][j1-j0];
         bottom_snd_buf[i-i0] = w[i-i0][0];
     }
 
@@ -395,7 +395,7 @@ double** apply_operator(double **w, double **pertrubed_f,
     {
         MPI_Wait(&left_rcv_req, &left_rcv_stat);
         MPI_Wait(&left_snd_req, &left_snd_stat);
-    }
+   }
 
     if (right_rank != -1) {
         MPI_Wait(&right_rcv_req, &right_rcv_stat);
@@ -419,7 +419,6 @@ double** apply_operator(double **w, double **pertrubed_f,
         pertrubed_f = fill_first_right_border_condition(w, pertrubed_f, y, m+1, n+1, i0, j0, i1, j1);
     }
 
-// // todo: use data from another process;
     if (j0 != 0) {
         pertrubed_f = fill_third_bottom_condition(w, pertrubed_f, x, y, q, m+1, n+1, i0, j0, i1, j1,
                                                   left_rcv_buf, right_rcv_buf,
@@ -457,7 +456,7 @@ int main(int argc, char *argv[]) {
     int M_local, N_local, i0, i1, j0, j1;
 
 
-    int n_procs = 9;
+    int n_procs = 10;
     dimensions[0] = atoi(argv[argc-2]);
     dimensions[1] = atoi(argv[argc-1]);
 
@@ -522,27 +521,27 @@ int main(int argc, char *argv[]) {
     int k = 0, i, j, out_ind;
 
     double **b = (double **) malloc((M_local + 1) * sizeof(double *));
-    for (i = 0; i < M_local + 1; ++i) {
+    for (i = 0; i <= M_local + 1; ++i) {
         b[i] = (double *) malloc((N_local + 1) * sizeof(double));
     }
 
     double **c = (double **) malloc((M_local + 1) * sizeof(double *));
-    for (i = 0; i < M_local + 1; ++i) {
+    for (i = 0; i <= M_local + 1; ++i) {
         c[i] = (double *) malloc((N_local + 1) * sizeof(double));
     }
 
     double **r = (double **) malloc((M_local + 1) * sizeof(double *));
-    for (i = 0; i < M_local + 1; ++i) {
+    for (i = 0; i <= M_local + 1; ++i) {
         r[i] = (double *) malloc((N_local + 1) * sizeof(double));
     }
 
     double **pertrubed_f = (double **) malloc((M_local + 1) * sizeof(double *));
-    for (i = 0; i < M_local + 1; ++i) {
+    for (i = 0; i <= M_local + 1; ++i) {
         pertrubed_f[i] = (double *) malloc((N_local + 1) * sizeof(double));
     }
 
     double** ar = (double **) malloc((M_local + 1) * sizeof(double *));
-    for (i = 0; i < M_local + 1; ++i) {
+    for (i = 0; i <= M_local + 1; ++i) {
         ar[i] = (double *) malloc((N_local + 1) * sizeof(double));
     }
 
@@ -563,24 +562,26 @@ int main(int argc, char *argv[]) {
     double ***w = (double ***) malloc(2 * sizeof(double **));
     for (i = 0; i < 2; ++i){
         w[i] = (double **) malloc((M_local + 1) * sizeof(double *));
-        for (j = 0; j < M_local + 1; ++j) {
+        for (j = 0; j <= M_local + 1; ++j) {
             w[i][j] = (double *) malloc((N_local + 1) * sizeof(double));
         }
     }
+
 
     b = fill_f(b, x, y,
                M_local, N_local,
                i0, i1, j0, j1);
 
+
     for (out_ind = 0; out_ind < 2; ++out_ind) {
-        for (i = i0; i < i1; ++i) {
-            for (j = j0; j < j1; ++j) {
+        for (i = i0; i <= i1; ++i) {
+            for (j = j0; j <= j1; ++j) {
                 w[out_ind][i-i0][j-j0] = 0;
             }
         }
     }
 
-    for (i = i0; i < i1; ++i) {
+    for (i = i0; i <= i1; ++i) {
         for (j = j0; j <= j1; ++j) {
             w[0][i-i0][j-j0] = u_function(x[i-i0], y[j-j0]);
             c[i-i0][j-j0] = 0;
@@ -590,19 +591,19 @@ int main(int argc, char *argv[]) {
 
 
     do {
-        pertrubed_f = apply_operator(w[0], pertrubed_f, x, y, q, M_local, N_local, i0, j0, i1, j1, ranks, grid_comm);
+        pertrubed_f = apply_operator(w[0], pertrubed_f, x, y, q, M_local, N_local, i0, j0, i1, j1, ranks, grid_comm, rank);
 
         r = matrix_difference(pertrubed_f, b, r, M_local+1 , N_local+1);
 
-        ar = apply_operator(r, ar, x, y, q, M_local, N_local, i0, j0, i1, j1, ranks, grid_comm);
+        ar = apply_operator(r, ar, x, y, q, M_local, N_local, i0, j0, i1, j1, ranks, grid_comm, rank);
 
         double tmp = norm(ar, M_local+1, N_local+1, i0, i1, j0, j1, size, rank);
 
         double t = dot_product(ar, r, M_local+1, N_local+1, i0, i1, j0, j1, size, rank) / (tmp * tmp);
 //        printf("t = %f %d %d %d %d tmp %f\n", dot_product(ar, r, M_local+1, N_local+1, i0, i1, j0, j1, size, rank), i0, i1, j0, j1, tmp);
-        for (i = 0; i < M_local + 1; ++i) {
-            for (j = 0; j < N_local + 1; ++j) {
-                w[1][i][j] = w[0][i][j] - t * r[i][j];
+        for (i = i0; i <= i1; ++i) {
+            for (j = j0; j <= j1; ++j) {
+                w[1][i-i0][j-j0] = w[0][i-i0][j-j0] - t * r[i-i0][j-j0];
             }
         }
 
@@ -613,15 +614,15 @@ int main(int argc, char *argv[]) {
                             size, rank);
 
 //        //      swap values for minimal memory usages
-        for (i = i0; i < i1; ++i) {
-            for (j = j0; j < j1; ++j) {
+        for (i = i0; i <= i1; ++i) {
+            for (j = j0; j <= j1; ++j) {
                 w[0][i-i0][j-j0] = w[1][i-i0][j-j0];
             }
         }
-        ++k;
         if (k % 20 == 0) {
             printf("process = %d, iteration = %d: norm = %f, tmp = %f,  t = %f\n", rank, k, current_norm, tmp, t);
         }
+        ++k;
 //    } while (0);
     } while (current_norm > eps);
 
