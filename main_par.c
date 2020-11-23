@@ -2,14 +2,15 @@
 #include <stdlib.h>
 #include <math.h>
 #include </usr/include/mpi/mpi.h>
+//#include "mpi.h"
 
 #define A1 (-2.0)
 #define A2 3.0
 #define B1 (-1.0)
 #define B2 4.0
 
-#define N 140
-#define M 140
+#define N 500
+#define M 500
 
 #define eps 0.00001
 
@@ -337,9 +338,9 @@ double** apply_operator(double **w, double **pertrubed_f,
                         const int i0, const int j0, const int i1, const int j1,
                         const int *rank,  MPI_Comm comm, int rank_number) {
 
-    printf("rank %d: %d %d %d %d\n", rank_number, rank[0], rank[1], rank[2], rank[3]);
+//    printf("rank %d: %d %d %d %d\n", rank_number, rank[0], rank[1], rank[2], rank[3]);
     int left_rank = rank[0], right_rank = rank[1], top_rank = rank[2], bottom_rank = rank[3], tmp;
-    printf("rank %d: left=%d right=%d top=%d bottom=%d\n", rank_number, left_rank, right_rank, top_rank, bottom_rank);
+//    printf("rank %d: left=%d right=%d top=%d bottom=%d\n", rank_number, left_rank, right_rank, top_rank, bottom_rank);
     double right_snd_buf[n + 1], right_rcv_buf[n + 1];
     double left_snd_buf[n + 1], left_rcv_buf[n + 1];
     double top_snd_buf[m + 1], top_rcv_buf[m + 1];
@@ -370,57 +371,55 @@ double** apply_operator(double **w, double **pertrubed_f,
         top_snd_buf[i-i0] = w[i-i0][j1-j0];
         bottom_snd_buf[i-i0] = w[i-i0][0];
     }
-    printf("rank %d: left=%d right=%d top=%d bottom=%d\n", rank_number, left_rank, right_rank, top_rank, bottom_rank);
+//    printf("rank %d: left=%d right=%d top=%d bottom=%d\n", rank_number, left_rank, right_rank, top_rank, bottom_rank);
     tmp = rank[0];
+//    MPI_Sendrecv(&left_snd_buf[0], (n+1), MPI_DOUBLE, rank_send, TAG_X,right.data, size_y* size_z, MPI_DOUBLE, rank_recv, TAG_X, cart_comm, &status);
+
     if (tmp != -1) {
-        printf("send from %d to %d\n", rank_number, tmp);
-        MPI_Isend(&left_snd_buf[0], n+1, MPI_DOUBLE, tmp, tag, comm, &left_snd_req);
-        
-        MPI_Irecv(&left_rcv_buf[0], n+1, MPI_DOUBLE, tmp, tag, comm, &left_rcv_req);
+//        printf("send rank=%d %f\n ", rank_number, left_snd_buf[0]);
+//        printf("send to left %d from rank %d\n", tmp, rank_number);
+        MPI_Sendrecv(&left_snd_buf[0], (n+1), MPI_DOUBLE, tmp, tag, &left_rcv_buf[0], n+1, MPI_DOUBLE, tmp, tag, comm, &left_snd_stat);
+//        printf("rcv rank=%d %f %f\n", rank_number, left_snd_buf[0], left_rcv_buf[0]);
     }
-//
+
     tmp = rank[1];
     if (tmp != -1) {
-        printf("send from %d to %d\n", rank_number, tmp);
-        MPI_Isend(&right_snd_buf[0], n+1, MPI_DOUBLE, tmp, tag, comm, &right_snd_req);
+//        printf("send to right %d from rank %d\n", tmp, rank_number);
+        MPI_Sendrecv(&right_snd_buf[0], (n+1), MPI_DOUBLE, tmp, tag, &right_rcv_buf[0], n+1, MPI_DOUBLE, tmp, tag, comm, &right_snd_stat);
+//        printf("send rank=%d snd=%f rcv=%f\n", rank_number, right_snd_buf[0],  right_rcv_buf[0]);
         tmp = rank[1];
-        MPI_Irecv(&right_rcv_buf[0], n+1, MPI_DOUBLE, tmp, tag, comm, &right_rcv_req);
     }
     tmp = rank[2];
     if (tmp != -1) {
-        printf("send from %d to %d\n", rank_number, tmp);
-        MPI_Isend(&top_snd_buf[0], m+1, MPI_DOUBLE, tmp, tag, comm, &top_snd_req);
-        tmp = rank[2];
-        MPI_Irecv(&top_rcv_buf[0], m+1, MPI_DOUBLE, tmp, tag, comm, &top_rcv_req);
+//        printf("send from %d to %d\n", rank_number, tmp);
+        MPI_Sendrecv(&top_snd_buf[0], (m+1), MPI_DOUBLE, tmp, tag, &top_rcv_buf[0], m+1, MPI_DOUBLE, tmp, tag, comm, &top_snd_stat);
+//        printf("AFTER top\n");
     }
-
+//
     tmp = rank[3];
     if (rank[3] != -1) {
-        printf("send from %d to %d\n", rank_number, tmp);
-        MPI_Isend(&bottom_snd_buf[0], m+1, MPI_DOUBLE, tmp, tag, comm, &bottom_snd_req);
-        tmp = rank[3];
-        MPI_Irecv(&bottom_rcv_buf[0], m+1, MPI_DOUBLE, tmp, tag, comm, &bottom_rcv_req);
+        MPI_Sendrecv(&bottom_snd_buf[0], (m+1), MPI_DOUBLE, tmp, tag, &bottom_rcv_buf[0], m+1, MPI_DOUBLE, tmp, tag, comm, &bottom_snd_stat);
     }
 
-    if (left_rank != -1)
-    {
-        MPI_Wait(&left_rcv_req, &left_rcv_stat);
-        MPI_Wait(&left_snd_req, &left_snd_stat);
-   }
-
-    if (right_rank != -1) {
-        MPI_Wait(&right_rcv_req, &right_rcv_stat);
-        MPI_Wait(&right_snd_req, &right_snd_stat);
-    }
-    if (top_rank != -1) {
-        MPI_Wait(&top_rcv_req, &top_rcv_stat);
-        MPI_Wait(&top_snd_req, &top_snd_stat);
-    }
-
-    if (bottom_rank != -1) {
-        MPI_Wait(&bottom_rcv_req, &bottom_rcv_stat);
-        MPI_Wait(&bottom_snd_req, &bottom_snd_stat);
-    }
+//    if (left_rank != -1)
+//    {
+//        MPI_Wait(&left_rcv_req, &left_rcv_stat);
+//        MPI_Wait(&left_snd_req, &left_snd_stat);
+//   }
+//
+//    if (right_rank != -1) {
+//        MPI_Wait(&right_rcv_req, &right_rcv_stat);
+//        MPI_Wait(&right_snd_req, &right_snd_stat);
+//    }
+//    if (top_rank != -1) {
+//        MPI_Wait(&top_rcv_req, &top_rcv_stat);
+//        MPI_Wait(&top_snd_req, &top_snd_stat);
+//    }
+//
+//    if (bottom_rank != -1) {
+//        MPI_Wait(&bottom_rcv_req, &bottom_rcv_stat);
+//        MPI_Wait(&bottom_snd_req, &bottom_snd_stat);
+//    }
     if (i0 == 0) {
         pertrubed_f = fill_first_left_border_condition(w, pertrubed_f, x, m+1, n+1, i0, j0, i1, j1);
     }
@@ -431,19 +430,19 @@ double** apply_operator(double **w, double **pertrubed_f,
 
     if (j0 != 0) {
         pertrubed_f = fill_third_bottom_condition(w, pertrubed_f, x, y, q, m+1, n+1, i0, j0, i1, j1,
-                                                  left_rcv_buf, right_rcv_buf,
-                                                  right_rcv_buf, bottom_rcv_buf);
+                                                  right_rcv_buf, left_rcv_buf,
+                                                  bottom_rcv_buf, top_rcv_buf);
     }
 
     if (j1 != N) {
         pertrubed_f = fill_third_top_condition(w, pertrubed_f, x, y, q, m+1, n+1, i0, j0, i1, j1,
-                                               left_rcv_buf, right_rcv_buf,
-                                               top_rcv_buf, bottom_rcv_buf);
+                                               right_rcv_buf, left_rcv_buf,
+                                               bottom_rcv_buf, top_rcv_buf);
     }
 
     pertrubed_f = fill_operator_part(w, pertrubed_f, x, y, q, m+1, n+1, i0, j0, i1, j1,
-                                     left_rcv_buf, right_rcv_buf,
-                                     top_rcv_buf, bottom_rcv_buf);
+                                     right_rcv_buf, left_rcv_buf,
+                                     bottom_rcv_buf, top_rcv_buf);
     return pertrubed_f;
 }
 
@@ -466,12 +465,11 @@ int main(int argc, char *argv[]) {
     int M_local, N_local, i0, i1, j0, j1;
 
 
-    int n_procs = 10;
     dimensions[0] = atoi(argv[argc-2]);
     dimensions[1] = atoi(argv[argc-1]);
 
-    if (n_procs != dimensions[0] * dimensions[1]) {
-        printf("ERROR: dim[0] = %d, dim[1] = %d, procs = %d\n", dimensions[0], dimensions[1], n_procs);
+    if (size != dimensions[0] * dimensions[1]) {
+        printf("ERROR: dim[0] = %d, dim[1] = %d, procs = %d\n", dimensions[0], dimensions[1], size);
         exit(-1);
     }
 
@@ -529,8 +527,8 @@ int main(int argc, char *argv[]) {
     ranks[1] = right_rank;
     ranks[2] = top_rank;
     ranks[3] = bottom_rank;
-    printf("pi=%d pj=%d i0=%d i1=%d j0=%d j1=%d size=%d rank=%d\n", Pi, Pj, i0, i1, j0, j1, size, rank);
-    printf("pi=%d pj=%d left=%d right=%d top=%d bottom=%d size=%d rank=%d\n", Pi, Pj, left_rank, right_rank, top_rank, bottom_rank, size, rank);
+//    printf("pi=%d pj=%d i0=%d i1=%d j0=%d j1=%d size=%d rank=%d\n", Pi, Pj, i0, i1, j0, j1, size, rank);
+//    printf("pi=%d pj=%d left=%d right=%d top=%d bottom=%d size=%d rank=%d\n", Pi, Pj, left_rank, right_rank, top_rank, bottom_rank, size, rank);
 
 
     double q = 1.0, current_norm;
@@ -641,6 +639,8 @@ int main(int argc, char *argv[]) {
         ++k;
 //    } while (0);
     } while (current_norm > eps);
+
+    printf("finish %f %d\n", current_norm, k);
 
     free(x);
     free(y);
